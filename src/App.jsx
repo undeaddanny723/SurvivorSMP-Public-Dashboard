@@ -1,121 +1,123 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useEffect, useRef, useState } from 'react'
+import useTheme from './hooks/useTheme.js'
+import useServerStatus from './hooks/useServerStatus.js'
+import useServerHistory from './hooks/useServerHistory.js'
+import useDerivedStats from './hooks/useDerivedStats.js'
+import Sidebar from './components/Sidebar.jsx'
+import TopBar from './components/TopBar.jsx'
+import Overview from './pages/Overview.jsx'
+import Players from './pages/Players.jsx'
+import Analytics from './pages/Analytics.jsx'
+import ServerInfo from './pages/ServerInfo.jsx'
 import './App.css'
 
+function formatToastMessage(isOnline) {
+  return isOnline ? 'Server is now online' : 'Server is now offline'
+}
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [activePage, setActivePage] = useState('Overview')
+  const [toast, setToast] = useState(null)
+  const toastTimerRef = useRef(null)
+
+  const { theme, toggleTheme } = useTheme()
+  const { status, geo } = useServerStatus()
+  const history = useServerHistory()
+
+  const derived = useDerivedStats({
+    history: history.history,
+    peak: history.peak,
+    incidents: history.incidents,
+  })
+
+  useEffect(() => {
+    if (!status.retrievedAt) return
+    history.addEntry(status)
+  }, [status.retrievedAt])
+
+  useEffect(() => {
+    const handleServerStatusChange = (event) => {
+      const isOnline = Boolean(event?.detail?.online)
+
+      setToast({
+        id: `${Date.now()}-${isOnline ? 'online' : 'offline'}`,
+        message: formatToastMessage(isOnline),
+        tone: isOnline ? 'online' : 'offline',
+      })
+    }
+
+    window.addEventListener('serverStatusChange', handleServerStatusChange)
+
+    return () => {
+      window.removeEventListener('serverStatusChange', handleServerStatusChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return undefined
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current)
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null)
+      toastTimerRef.current = null
+    }, 4000)
+
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current)
+        toastTimerRef.current = null
+      }
+    }
+  }, [toast])
+
+  let activeView = null
+
+  if (activePage === 'Overview') {
+    activeView = <Overview status={status} history={history} derived={derived} />
+  } else if (activePage === 'Players') {
+    activeView = <Players status={status} history={history} derived={derived} />
+  } else if (activePage === 'Analytics') {
+    activeView = <Analytics status={status} history={history} derived={derived} />
+  } else if (activePage === 'ServerInfo') {
+    activeView = <ServerInfo status={status} geo={geo} />
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="flex min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
+      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+
+      <main className="min-h-screen min-w-0 flex-1 pl-56">
+        <TopBar
+          theme={theme}
+          onThemeToggle={toggleTheme}
+          serverName="SurvivorSMP"
+          isOnline={Boolean(status.online)}
+        />
+
+        <div className="px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl">{activeView}</div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+      </main>
+
+      {toast ? (
+        <div
+          key={toast.id}
+          role="status"
+          aria-live="polite"
+          className={[
+            'app-toast fixed bottom-4 right-4 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl',
+            toast.tone === 'online'
+              ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-50'
+              : 'border-rose-400/30 bg-rose-500/15 text-rose-50',
+          ].join(' ')}
         >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+          <div className="text-sm font-semibold">{toast.message}</div>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      ) : null}
+    </div>
   )
 }
 
