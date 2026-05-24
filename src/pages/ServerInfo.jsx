@@ -1,6 +1,8 @@
 import ServerInfoCard from '../components/ServerInfoCard.jsx'
 import LocationCard from '../components/LocationCard.jsx'
 import PluginList from '../components/PluginList.jsx'
+import VersionHistory from '../components/VersionHistory.jsx'
+import useServerHistory from '../hooks/useServerHistory.js'
 
 function formatAuthMode(value) {
   const mode = Number(value)
@@ -30,13 +32,37 @@ function formatMods(mods) {
     .filter(Boolean)
 }
 
+function getDisplayGeo(status = {}, geo = {}) {
+  const ip = geo.ip || status.ip || ''
+  const hasLocation = [geo.country, geo.city, geo.region, geo.isp].some(
+    (part) => typeof part === 'string' && part.trim() && part.trim() !== 'Unknown'
+  )
+
+  if (hasLocation || !ip.startsWith('68.169.100.133')) return { ...geo, ip }
+
+  return {
+    ip,
+    country: 'The Netherlands',
+    countryCode: 'NL',
+    city: 'Amsterdam',
+    region: 'North Holland',
+    isp: 'Pufferfish Studios LLC',
+    timezone: 'Europe/Amsterdam',
+    lat: 52.3907,
+    lon: 4.8637,
+  }
+}
+
 export default function ServerInfo({ status = {}, geo = {} }) {
   const plugins = formatMods(status.mods)
+  const displayGeo = getDisplayGeo(status, geo)
+  const { versionHistory } = useServerHistory()
 
   return (
     <div className="space-y-6">
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <ServerInfoCard
+          ip={status.ip || geo.ip || 'Unknown'}
           version={status.version || 'Unknown'}
           software={status.software || 'Unknown'}
           motd={status.motd || 'No MOTD'}
@@ -47,14 +73,15 @@ export default function ServerInfo({ status = {}, geo = {} }) {
         />
 
         <LocationCard
-          country={geo.country || 'Unknown'}
-          countryCode={geo.countryCode || ''}
-          city={geo.city || 'Unknown'}
-          region={geo.region || 'Unknown'}
-          isp={geo.isp || 'Unknown'}
-          timezone={geo.timezone || 'Unknown'}
-          lat={geo.lat ?? 'Unknown'}
-          lon={geo.lon ?? 'Unknown'}
+          ip={displayGeo.ip || 'Unknown'}
+          country={displayGeo.country || 'Unknown'}
+          countryCode={displayGeo.countryCode || ''}
+          city={displayGeo.city || 'Unknown'}
+          region={displayGeo.region || 'Unknown'}
+          isp={displayGeo.isp || 'Unknown'}
+          timezone={displayGeo.timezone || 'Unknown'}
+          lat={displayGeo.lat ?? 'Unknown'}
+          lon={displayGeo.lon ?? 'Unknown'}
         />
       </section>
 
@@ -63,6 +90,13 @@ export default function ServerInfo({ status = {}, geo = {} }) {
           Plugins
         </div>
         <PluginList plugins={plugins} />
+      </section>
+
+      <section className="rounded-xl bg-slate-50 p-5 shadow-sm dark:bg-slate-800 dark:shadow-none">
+        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+          Version History
+        </div>
+        <VersionHistory versionHistory={versionHistory} />
       </section>
     </div>
   )
