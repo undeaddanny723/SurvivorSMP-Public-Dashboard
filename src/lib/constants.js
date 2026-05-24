@@ -2,7 +2,7 @@ export const SERVER_ADDRESS = 'survivorsmp.net'
 export const MCSTATUS_URL = `https://api.mcstatus.io/v2/status/java/${SERVER_ADDRESS}`
 export const MCSRVSTAT_URL = `https://api.mcsrvstat.us/3/${SERVER_ADDRESS}`
 export const MCSCANS_URL = `https://api.mcscans.fi/public/v1/servers?query=${SERVER_ADDRESS}`
-export const IPWHOIS_URL = (ip) => `https://ipwhois.io/json/${ip}`
+export const IPWHOIS_URL = (ip) => `https://get.geojs.io/v1/ip/geo/${ip}.json`
 export const POLL_INTERVAL_MS = 120000
 export const LS_KEYS = {
   HISTORY: 'smp_history',

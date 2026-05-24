@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { CAPACITY_DANGER, CAPACITY_WARN } from '../lib/constants'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -69,6 +69,8 @@ function buildProjectionPoints(entries) {
 }
 
 export default function useDerivedStats({ history = [], peak, incidents } = {}) {
+  const [now] = useState(() => Date.now())
+
   return useMemo(() => {
     void peak
     void incidents
@@ -117,7 +119,7 @@ export default function useDerivedStats({ history = [], peak, incidents } = {}) 
       avg: count > 0 ? total / count : 0,
     }))
 
-    const today = startOfDay(Date.now())
+    const today = startOfDay(now)
     const yesterdayStart = new Date(today.getTime() - DAY_MS)
     const yesterdayEnd = today
     const yesterdayHistory = entries.filter((entry) => {
@@ -150,5 +152,5 @@ export default function useDerivedStats({ history = [], peak, incidents } = {}) 
       projectionPoints,
       heatmapData,
     }
-  }, [history, peak, incidents])
+  }, [history, peak, incidents, now])
 }

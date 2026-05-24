@@ -7,11 +7,7 @@ function readStoredTheme() {
 }
 
 export default function useTheme() {
-  const [theme, setTheme] = useState('dark')
-
-  useEffect(() => {
-    setTheme(readStoredTheme())
-  }, [])
+  const [theme, setTheme] = useState(() => readStoredTheme())
 
   useEffect(() => {
     const root = document.documentElement

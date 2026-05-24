@@ -1,162 +1,148 @@
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
-import useDerivedStats from '../hooks/useDerivedStats';
+import useDerivedStats from '../hooks/useDerivedStats'
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 p-3 rounded-lg shadow-md text-xs">
-        <p className="font-semibold text-slate-700 dark:text-slate-200 mb-1">{label}</p>
-        {payload.map((p, idx) => {
-          if (p.value === null || p.value === undefined) return null;
-          return (
-            <div key={idx} className="flex items-center gap-2 py-0.5">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.stroke || p.color }} />
-              <span className="text-slate-500 dark:text-slate-400">{p.name}:</span>
-              <span className="font-semibold text-slate-800 dark:text-slate-100">
-                {typeof p.value === 'number' ? p.value.toFixed(1) : p.value}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-  return null;
-};
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
 
-export default function ProjectionChart({ history = [] }) {
-  const derived = useDerivedStats({ history });
-  const projectionPoints = derived?.projectionPoints || [];
-  const last20 = (history || []).slice(-20);
+function buildPath(data, key, maxValue) {
+  return data
+    .map((entry, index) => {
+      const value = Number(entry[key])
+      if (!Number.isFinite(value)) return null
 
-  let activeHistory = last20;
-  if (activeHistory.length === 0) {
-    const now = Date.now();
-    activeHistory = Array.from({ length: 20 }, (_, idx) => {
-      const timestamp = now - (19 - idx) * 15 * 60 * 1000;
-      return {
-        timestamp,
-        players: {
-          online: 5 + Math.sin(idx / 2) * 3 + Math.random() * 2,
-        },
-      };
-    });
-  }
+      const x = data.length <= 1 ? 50 : (index / (data.length - 1)) * 100
+      const y = 92 - (value / maxValue) * 82
+      return `${x.toFixed(2)},${y.toFixed(2)}`
+    })
+    .filter(Boolean)
+    .join(' ')
+}
 
-  let activeProjection = projectionPoints;
-  if (activeProjection.length === 0 && activeHistory.length > 0) {
-    const lastPoint = activeHistory[activeHistory.length - 1];
-    const interval = 15 * 60 * 1000;
-    activeProjection = Array.from({ length: 5 }, (_, idx) => {
-      return {
-        timestamp: lastPoint.timestamp + interval * (idx + 1),
-        projected: Math.max(0, (lastPoint.players?.online ?? 5) + (idx + 1) * 0.5 + Math.sin(idx) * 1.5),
-      };
-    });
-  }
-
-  const chartData = [];
-  activeHistory.forEach((entry) => {
-    const timestamp = entry.timestamp;
-    const dateObj = new Date(timestamp);
-    const displayTime = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    chartData.push({
-      timestamp,
-      displayTime,
-      historyVal: entry?.players?.online ?? 0,
-      projectionVal: null,
-    });
-  });
-
-  const lastHistoryPoint = chartData[chartData.length - 1];
-  if (lastHistoryPoint && activeProjection.length > 0) {
-    lastHistoryPoint.projectionVal = lastHistoryPoint.historyVal;
-
-    activeProjection.forEach((pt) => {
-      const dateObj = new Date(pt.timestamp);
-      const displayTime = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-      chartData.push({
-        timestamp: pt.timestamp,
-        displayTime,
-        historyVal: null,
-        projectionVal: pt.projected,
-      });
-    });
-  }
+function ChartLine({ data, dataKey, maxValue, className, dashed = false }) {
+  const points = buildPath(data, dataKey, maxValue)
+  if (!points) return null
 
   return (
-    <div className="w-full rounded-xl p-5 bg-slate-50 dark:bg-slate-800 shadow-sm dark:shadow-none flex flex-col">
+    <polyline
+      fill="none"
+      points={points}
+      stroke="currentColor"
+      strokeDasharray={dashed ? '4 4' : undefined}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2.5"
+      className={className}
+    />
+  )
+}
+
+export default function ProjectionChart({ history = [] }) {
+  const derived = useDerivedStats({ history })
+  const activeHistory = (history || []).slice(-20)
+  const activeProjection = derived?.projectionPoints || []
+
+  const chartData = activeHistory.map((entry) => ({
+    timestamp: entry.timestamp,
+    displayTime: formatTime(entry.timestamp),
+    historyVal: entry?.players?.online ?? 0,
+    projectionVal: null,
+  }))
+
+  const lastHistoryPoint = chartData[chartData.length - 1]
+  if (lastHistoryPoint && activeProjection.length > 0) {
+    lastHistoryPoint.projectionVal = lastHistoryPoint.historyVal
+    activeProjection.forEach((point) => {
+      chartData.push({
+        timestamp: point.timestamp,
+        displayTime: formatTime(point.timestamp),
+        historyVal: null,
+        projectionVal: point.projected,
+      })
+    })
+  }
+
+  const values = chartData.flatMap((entry) =>
+    [entry.historyVal, entry.projectionVal].map(Number).filter(Number.isFinite)
+  )
+  const maxValue = Math.max(1, ...values)
+  const splitIndex = chartData.findIndex((entry) => entry.projectionVal !== null)
+  const splitX =
+    splitIndex <= 0 || chartData.length <= 1 ? null : (splitIndex / (chartData.length - 1)) * 100
+
+  return (
+    <div className="flex w-full flex-col rounded-xl bg-slate-50 p-5 shadow-sm dark:bg-slate-800 dark:shadow-none">
       <div>
-        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Player Projection
         </h3>
-        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-          Forecasted player activity for the next 24 hours based on historical trends.
+        <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+          Forecasted player activity based on recent status checks.
         </p>
       </div>
 
-      <div className="h-44 mt-4 relative w-full flex items-center justify-center border border-dashed border-slate-200 dark:border-slate-700/60 rounded-xl overflow-hidden bg-white/40 dark:bg-slate-900/30">
-        <div className="w-full h-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 15, right: 15, left: -20, bottom: 5 }}>
-              <XAxis
-                dataKey="displayTime"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#94a3b8', fontSize: 9 }}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#94a3b8', fontSize: 9 }}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine
-                x={lastHistoryPoint?.displayTime}
-                stroke="#64748b"
-                strokeDasharray="3 3"
-                label={{
-                  value: 'Projected ➔',
-                  position: 'insideTopRight',
-                  fill: '#f59e0b',
-                  fontSize: 10,
-                  fontWeight: 'bold',
-                  offset: 8,
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="historyVal"
-                name="Historical"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-                connectNulls
-              />
-              <Line
-                type="monotone"
-                dataKey="projectionVal"
-                name="Projected"
-                stroke="#f59e0b"
-                strokeWidth={2}
-                strokeDasharray="4 4"
-                dot={false}
-                activeDot={{ r: 4 }}
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="absolute bottom-3 right-3 flex items-center gap-3 bg-white/80 dark:bg-slate-900/80 px-2 py-1 rounded text-[10px] font-semibold backdrop-blur-xs border border-slate-100 dark:border-slate-800">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-0.5 bg-blue-500 inline-block" /> Historical
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-0.5 bg-amber-500 border-t border-dashed inline-block" /> Projected
-          </span>
-        </div>
+      <div className="relative mt-4 flex h-44 w-full items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-200 bg-white/40 dark:border-slate-700/60 dark:bg-slate-900/30">
+        {chartData.length > 1 ? (
+          <>
+            <div className="h-full w-full p-3 pb-8">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
+                {[20, 40, 60, 80].map((y) => (
+                  <line
+                    key={y}
+                    x1="0"
+                    x2="100"
+                    y1={y}
+                    y2={y}
+                    stroke="currentColor"
+                    strokeWidth="0.35"
+                    className="text-slate-200 dark:text-slate-700"
+                  />
+                ))}
+                {splitX !== null ? (
+                  <line
+                    x1={splitX}
+                    x2={splitX}
+                    y1="4"
+                    y2="96"
+                    stroke="currentColor"
+                    strokeDasharray="3 3"
+                    strokeWidth="0.8"
+                    className="text-slate-400"
+                  />
+                ) : null}
+                <ChartLine data={chartData} dataKey="historyVal" maxValue={maxValue} className="text-blue-500" />
+                <ChartLine
+                  data={chartData}
+                  dataKey="projectionVal"
+                  maxValue={maxValue}
+                  dashed
+                  className="text-amber-500"
+                />
+              </svg>
+            </div>
+            <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] font-medium text-slate-400">
+              <span>{chartData[0]?.displayTime}</span>
+              <span>{maxValue.toFixed(0)} max</span>
+              <span>{chartData.at(-1)?.displayTime}</span>
+            </div>
+            <div className="absolute right-3 top-3 flex items-center gap-3 rounded border border-slate-100 bg-white/80 px-2 py-1 text-[10px] font-semibold backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/80">
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-0.5 w-2 bg-blue-500" /> Historical
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-0.5 w-2 border-t border-dashed border-amber-500" /> Projected
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="px-4 text-center text-sm text-slate-500 dark:text-slate-400">
+            Projection needs at least two status checks.
+          </div>
+        )}
       </div>
     </div>
-  );
+  )
 }

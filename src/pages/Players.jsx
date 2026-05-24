@@ -16,21 +16,22 @@ function formatPercent(value) {
 
 export default function Players({ status = {}, history = {}, derived = {} }) {
   const historyEntries = Array.isArray(history.history) ? history.history : []
+  const online = Number(status.players?.online ?? 0)
+  const max = Number(status.players?.max ?? 0)
   const lastVisitDelta = Number.isFinite(Number(history.lastVisitDelta))
     ? Number(history.lastVisitDelta)
     : 0
 
-  void status
-
   return (
     <div className="space-y-6">
-      <PlayerGraph history={historyEntries} />
-
-      <section className="grid gap-4 sm:grid-cols-2">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Online Now" value={Number.isFinite(online) ? online : 0} />
+        <StatCard label="Max Slots" value={Number.isFinite(max) ? max : 0} />
         <StatCard label="vs Last Visit" value={formatSignedValue(lastVisitDelta)} />
         <StatCard label="Capacity" value={formatPercent(derived.capacityPct)} />
       </section>
 
+      <PlayerGraph history={historyEntries} />
       <SessionTimeline history={historyEntries} />
     </div>
   )

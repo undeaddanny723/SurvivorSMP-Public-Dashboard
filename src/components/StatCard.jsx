@@ -1,8 +1,9 @@
 import SparkLine from './SparkLine';
+import Card from './Card'; // Import the new Card component
 
 export default function StatCard({ label, value, subtext, sparkData, valueClassName = "text-slate-900 dark:text-slate-100" }) {
   return (
-    <div className="rounded-xl p-5 bg-slate-50 shadow-sm dark:bg-slate-800 dark:shadow-none flex flex-col">
+    <Card className="flex flex-col">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </div>
@@ -15,6 +16,6 @@ export default function StatCard({ label, value, subtext, sparkData, valueClassN
       <div className="mt-auto pt-3">
         <SparkLine data={sparkData} />
       </div>
-    </div>
+    </Card>
   );
 }

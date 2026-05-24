@@ -1,8 +1,8 @@
 export default function StatusBadge({ online, lastChecked }) {
   return (
-    <div className="inline-flex flex-col items-center gap-1">
+    <div className="inline-flex max-w-full flex-wrap items-center justify-end gap-2 text-right">
       <span
-        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-white ${
+        className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold text-white ${
           online
             ? 'bg-emerald-600 dark:bg-emerald-500'
             : 'bg-red-500'
@@ -10,7 +10,7 @@ export default function StatusBadge({ online, lastChecked }) {
       >
         {online ? 'Online' : 'Offline'}
       </span>
-      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+      <span className="min-w-0 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
         {lastChecked}
       </span>
     </div>
