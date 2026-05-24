@@ -161,9 +161,12 @@ export default function useServerHistory() {
     const nextIncidents = previous.incidents.map((incident) => ({ ...incident }))
     const previousOnline = currentOnlineRef.current
     const nextOnline = entry.online
-    if (previousOnline && !nextOnline) {
+
+    // Only proceed with incident creation if the server is offline (nextOnline === false).
+    // This prevents creating new incidents if the server is online.
+    if (previousOnline && !nextOnline) { // server was online, now offline: create new incident
       nextIncidents.push({ startedAt: timestamp })
-    } else if (!previousOnline && nextOnline) {
+    } else if (!previousOnline && nextOnline) { // server was offline, now online: close incident
       const openIndex = findLastOpenIncident(nextIncidents)
       if (openIndex !== -1) {
         const startedAt = toNumber(nextIncidents[openIndex].startedAt, timestamp)
