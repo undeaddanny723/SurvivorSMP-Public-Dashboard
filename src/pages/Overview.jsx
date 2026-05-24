@@ -3,10 +3,7 @@ import PlayerCountCard from '../components/PlayerCountCard.jsx'
 import StreakCard from '../components/StreakCard.jsx'
 import StatCard from '../components/StatCard.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
-import ServerHealthCard from '../components/ServerHealthCard.jsx' // New import
-
-import useServerStatus from '../hooks/useServerStatus.js' // New import
-import useServerHistory from '../hooks/useServerHistory.js' // New import
+import ServerHealthCard from '../components/ServerHealthCard.jsx'
 
 function formatDateTime(value) {
   if (!value) return ''
@@ -30,18 +27,17 @@ function formatNumber(value, digits = 1) {
   return nextValue.toFixed(digits)
 }
 
-export default function Overview() { // Modified function signature
-  const { status, derived } = useServerStatus()
-  const { history, incidents, streak } = useServerHistory()
-
-  const historyEntries = Array.isArray(history) ? history : [] // history is now directly the array
-  const peak = status.peak ?? null // Assuming peak comes from status now, or adjust if needed
+export default function Overview({ status, history, derived }) {
+  const historyEntries = Array.isArray(history.history) ? history.history : []
+  const incidents = history.incidents || []
+  
+  const online = status.players?.online ?? 0
+  const max = status.players?.max ?? 0
+  
   const previousCount =
     historyEntries.length > 1
       ? historyEntries[historyEntries.length - 2]?.players?.online ?? 0
-      : status.players?.online ?? 0
-  const online = status.players?.online ?? 0
-  const max = status.players?.max ?? 0
+      : online
 
   // Uptime Percentage Calculation
   let uptimePercentage = 100;
@@ -51,34 +47,34 @@ export default function Overview() { // Modified function signature
   if (historyEntries.length > 1) {
     const firstTimestamp = new Date(historyEntries[0].timestamp).getTime();
     const lastTimestamp = new Date(historyEntries[historyEntries.length - 1].timestamp).getTime();
-    totalTrackedTime = lastTimestamp - firstTimestamp; // in milliseconds
+    totalTrackedTime = lastTimestamp - firstTimestamp;
   }
 
-  if (incidents && incidents.length > 0) {
-    totalIncidentDuration = incidents.reduce((sum, incident) => sum + incident.duration, 0); // duration is already in milliseconds
+  if (incidents.length > 0) {
+    totalIncidentDuration = incidents.reduce((sum, incident) => sum + incident.duration, 0);
   }
 
   if (totalTrackedTime > 0) {
     const effectiveUptime = totalTrackedTime - totalIncidentDuration;
     uptimePercentage = (effectiveUptime / totalTrackedTime) * 100;
-    uptimePercentage = Math.max(0, Math.min(100, uptimePercentage)); // Clamp between 0 and 100
+    uptimePercentage = Math.max(0, Math.min(100, uptimePercentage));
   }
 
   // Incident Count 24h Calculation
   const now = Date.now();
   const oneDayAgo = now - 24 * 60 * 60 * 1000;
-  const incidentCount24h = (incidents || []).filter(incident => {
+  const incidentCount24h = incidents.filter(incident => {
     const startedAt = new Date(incident.startedAt).getTime();
-    const endedAt = incident.endedAt ? new Date(incident.endedAt).getTime() : now; // If incident is ongoing, consider 'now' as endedAt
+    const endedAt = incident.endedAt ? new Date(incident.endedAt).getTime() : now;
     return (startedAt >= oneDayAgo && startedAt <= now) || (endedAt >= oneDayAgo && endedAt <= now);
   }).length;
 
   // Streak Days Calculation
-  const streakDays = streak?.days ?? 0;
+  const streakDays = history.streak?.days ?? 0;
 
   // Health Score Calculation
   let healthScore = (uptimePercentage * 0.6) + ((100 - incidentCount24h * 10) * 0.2) + (streakDays * 0.2);
-  healthScore = Math.max(0, Math.min(100, healthScore)); // Clamp between 0 and 100
+  healthScore = Math.max(0, Math.min(100, healthScore));
 
   return (
     <div className="space-y-6">
@@ -117,7 +113,6 @@ export default function Overview() { // Modified function signature
 
         <div className="space-y-4">
           <StreakCard days={history.streak?.days ?? 0} hours={history.streak?.hours ?? 0} />
-          {/* Server Health Card */}
           <ServerHealthCard
             healthScore={healthScore}
             uptimePercentage={uptimePercentage}
@@ -133,11 +128,10 @@ export default function Overview() { // Modified function signature
         <StatCard label="Uptime" value={`${formatNumber(derived.uptimePct)}%`} />
         <StatCard
           label="All-Time Peak"
-          value={peak?.count ?? 0}
-          subtext={formatDateTime(peak?.timestamp) || 'No peak recorded yet'}
+          value={history.peak?.count ?? 0}
+          subtext={formatDateTime(history.peak?.timestamp) || 'No peak recorded yet'}
         />
       </section>
     </div>
   )
 }
-
