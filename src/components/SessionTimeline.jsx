@@ -1,45 +1,58 @@
-export default function SessionTimeline({ sessions }) {
-  const displaySessions = sessions && sessions.length > 0 ? sessions : [
-    { id: 1, player: 'UndeadDanny', start: '14:20', duration: '2h 15m', avatar: 'https://minotar.net/avatar/UndeadDanny/32' },
-    { id: 2, player: 'ProAtGaming', start: '15:10', duration: '1h 05m', avatar: 'https://minotar.net/avatar/ProAtGaming/32' },
-    { id: 3, player: 'Steve', start: '16:00', duration: '45m', avatar: 'https://minotar.net/avatar/Steve/32' },
-    { id: 4, player: 'Alex', start: '16:30', duration: '12m', avatar: 'https://minotar.net/avatar/Alex/32' },
-    { id: 5, player: 'Notch', start: '17:00', duration: '2h 40m', avatar: 'https://minotar.net/avatar/Notch/32' }
-  ];
+export default function SessionTimeline({ history = [], sessions }) {
+  // Use history if present, otherwise sessions (if it contains poll-like data), or fallback to mock data
+  const points = (history && history.length > 0)
+    ? history.slice(-20) // Display last 20 polls for clean horizontal density
+    : (sessions && Array.isArray(sessions) && sessions.length > 0 && ('online' in sessions[0] || 'status' in sessions[0]))
+      ? sessions.slice(-20)
+      : Array.from({ length: 15 }, (_, i) => {
+          const now = Date.now();
+          const timestamp = now - (14 - i) * 15 * 60 * 1000;
+          return {
+            timestamp,
+            online: i !== 4 && i !== 9, // Mock a few outages
+          };
+        });
 
   return (
     <div className="rounded-xl p-5 bg-slate-50 dark:bg-slate-800 shadow-sm dark:shadow-none flex flex-col w-full">
       <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
-        Active Sessions
+        Active Sessions Timeline
       </h3>
-      
-      {/* Horizontal scroll container overflow-x-auto */}
-      <div className="overflow-x-auto pb-2 flex gap-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
-        {displaySessions.map((session, index) => (
-          <div
-            key={session.id || index}
-            className="flex-shrink-0 flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl shadow-xs min-w-[180px]"
-          >
-            {session.avatar && (
-              <img
-                src={session.avatar}
-                alt={session.player}
-                className="w-8 h-8 rounded-md bg-slate-100 dark:bg-slate-800 object-cover"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                }}
-              />
-            )}
-            <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
-                {session.player}
-              </span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                Started {session.start} • {session.duration}
-              </span>
-            </div>
-          </div>
-        ))}
+
+      {/* Horizontal scroll container */}
+      <div className="overflow-x-auto pb-10 pt-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+        <div className="relative flex items-center justify-between px-6 min-w-[max-content] h-20">
+          {/* Horizontal line connecting dots */}
+          <div className="absolute left-10 right-10 h-[2px] bg-slate-600 top-[17px] z-0" />
+
+          {points.map((pt, idx) => {
+            const date = new Date(pt.timestamp);
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            const isOnline = pt.online;
+
+            return (
+              <div key={idx} className="flex flex-col items-center w-16 relative z-10 select-none group">
+                {/* Dot */}
+                <div
+                  className={`w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-800 shadow-xs transition-all duration-300 ${
+                    isOnline ? 'bg-emerald-500 hover:scale-125' : 'bg-red-500 hover:scale-125'
+                  }`}
+                  title={isOnline ? 'Online' : 'Offline'}
+                />
+
+                {/* Tooltip on hover */}
+                <div className="pointer-events-none absolute bottom-full mb-2 hidden group-hover:block bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[9px] px-1.5 py-0.5 rounded shadow-sm z-30 whitespace-nowrap">
+                  {isOnline ? 'Online' : 'Offline'}
+                </div>
+
+                {/* Timestamp rotated -45deg */}
+                <div className="absolute top-6 left-1/2 -translate-x-1/2 -rotate-45 whitespace-nowrap text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                  {timeStr}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
