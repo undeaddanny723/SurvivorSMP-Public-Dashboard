@@ -1,5 +1,5 @@
 export default function SparkLine({ data }) {
   return (
-    <svg></svg>
+    <svg className="w-full h-8 block" />
   );
 }
