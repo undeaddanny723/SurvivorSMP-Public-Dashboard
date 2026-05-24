@@ -92,7 +92,7 @@ function normalizeStatusFromMcstatus(data, fallback = EMPTY_STATUS) {
         fallback.motd
     ),
     icon: typeof data?.icon === 'string' ? data.icon : fallback.icon,
-    ip: typeof data?.ip === 'string' ? data.ip : fallback.ip,
+    ip: typeof data?.ip_address === 'string' ? data.ip_address : fallback.ip,
     software:
       typeof data?.software === 'string'
         ? data.software
@@ -131,7 +131,7 @@ function normalizeStatusFromMcsrvstat(data, fallback = EMPTY_STATUS) {
 }
 
 function normalizeStatusFromMcscans(data, fallback = EMPTY_STATUS) {
-  const server = Array.isArray(data?.data) ? data.data[0] : data?.server ?? data
+  const server = Array.isArray(data?.servers) ? data.servers[0] : data?.server ?? data
   const players = server?.players ?? {}
   return {
     online: Boolean(server?.online ?? data?.online ?? fallback.online),
@@ -279,7 +279,7 @@ export default function useServerStatus() {
           const storedGeo = readStoredGeo()
           if (localStorage.getItem(LS_KEYS.GEO)) {
             if (mountedRef.current) setGeo(storedGeo)
-          } else if (mcstatusData?.ip) {
+          } else if (mcstatusData?.ip_address) {
             try {
               const geoData = await fetchJson(IPWHOIS_URL(mcstatusData.ip), controller.signal)
               const normalizedGeo = normalizeGeo(geoData)
