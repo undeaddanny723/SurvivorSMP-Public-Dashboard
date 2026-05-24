@@ -21,8 +21,9 @@ function App() {
   const toastTimerRef = useRef(null)
 
   const { theme, toggleTheme } = useTheme()
-  const { status, geo } = useServerStatus()
+  const { status, geo, error: statusError } = useServerStatus()
   const history = useServerHistory()
+  const addHistoryEntry = history.addEntry
 
   const derived = useDerivedStats({
     history: history.history,
@@ -32,8 +33,9 @@ function App() {
 
   useEffect(() => {
     if (!status.retrievedAt) return
-    history.addEntry(status)
-  }, [status.retrievedAt])
+    if (statusError) return
+    addHistoryEntry(status)
+  }, [addHistoryEntry, status, statusError])
 
   useEffect(() => {
     const handleServerStatusChange = (event) => {
@@ -86,10 +88,10 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
 
-      <main className="min-h-screen min-w-0 flex-1 pl-56">
+      <main className="min-h-screen min-w-0 flex-1 pb-20 md:pl-56 md:pb-0">
         <TopBar
           theme={theme}
           onThemeToggle={toggleTheme}

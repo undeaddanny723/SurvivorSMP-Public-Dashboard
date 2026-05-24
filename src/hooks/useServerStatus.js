@@ -9,7 +9,7 @@ import {
 } from '../lib/constants'
 
 const EMPTY_STATUS = {
-  online: false,
+  online: undefined,
   players: { online: 0, max: 0 },
   version: '',
   motd: '',
@@ -24,6 +24,7 @@ const EMPTY_STATUS = {
 }
 
 const EMPTY_GEO = {
+  ip: '',
   country: '',
   countryCode: '',
   city: '',
@@ -32,6 +33,20 @@ const EMPTY_GEO = {
   timezone: '',
   lat: null,
   lon: null,
+}
+
+const GEO_FALLBACKS = {
+  '68.169.100.133': {
+    ip: '68.169.100.133',
+    country: 'The Netherlands',
+    countryCode: 'NL',
+    city: 'Amsterdam',
+    region: 'North Holland',
+    isp: 'Pufferfish Studios LLC',
+    timezone: 'Europe/Amsterdam',
+    lat: 52.3907,
+    lon: 4.8637,
+  },
 }
 
 function safeJsonParse(value, fallback) {
@@ -44,13 +59,31 @@ function safeJsonParse(value, fallback) {
 }
 
 function cleanText(value) {
-  if (typeof value !== 'string') return ''
-  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const text = Array.isArray(value) ? value.join(' ') : value
+  if (typeof text !== 'string') return ''
+
+  return text
+    .replace(/Â§#[0-9A-Fa-f]{6}/g, '')
+    .replace(/Â§[0-9A-FK-ORa-fk-or]/g, '')
+    .replace(/§#[0-9A-Fa-f]{6}/g, '')
+    .replace(/§[0-9A-FK-ORa-fk-or]/g, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function asNumber(value, fallback = 0) {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
+}
+
+function isObjectData(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function normalizeMods(value) {
@@ -75,7 +108,7 @@ function normalizeStatusFromMcstatus(data, fallback = EMPTY_STATUS) {
   const version = data?.version ?? {}
   const motd = data?.motd ?? {}
   return {
-    online: Boolean(data?.online ?? fallback.online),
+    online: typeof data?.online === 'boolean' ? data.online : undefined,
     players: {
       online: asNumber(players?.online, fallback.players.online),
       max: asNumber(players?.max, fallback.players.max),
@@ -109,7 +142,7 @@ function normalizeStatusFromMcsrvstat(data, fallback = EMPTY_STATUS) {
   const players = data?.players ?? {}
   const version = data?.version ?? {}
   return {
-    online: Boolean(data?.online ?? fallback.online),
+    online: typeof data?.online === 'boolean' ? data.online : undefined,
     players: {
       online: asNumber(players?.online, fallback.players.online),
       max: asNumber(players?.max, fallback.players.max),
@@ -133,8 +166,15 @@ function normalizeStatusFromMcsrvstat(data, fallback = EMPTY_STATUS) {
 function normalizeStatusFromMcscans(data, fallback = EMPTY_STATUS) {
   const server = Array.isArray(data?.servers) ? data.servers[0] : data?.server ?? data
   const players = server?.players ?? {}
+  const online =
+    typeof server?.online === 'boolean'
+      ? server.online
+      : typeof data?.online === 'boolean'
+        ? data.online
+        : undefined
+
   return {
-    online: Boolean(server?.online ?? data?.online ?? fallback.online),
+    online,
     players: {
       online: asNumber(players?.online ?? server?.players_online, fallback.players.online),
       max: asNumber(players?.max ?? server?.players_max, fallback.players.max),
@@ -179,20 +219,50 @@ function mergeStatus(...parts) {
 
 function normalizeGeo(data) {
   if (!data || typeof data !== 'object') return { ...EMPTY_GEO }
+
+  const timezone =
+    typeof data.timezone === 'string'
+      ? data.timezone
+      : data.timezone?.id ?? data.timezone?.utc ?? ''
+
   return {
+    ip: data.ip ?? data.query ?? '',
     country: data.country ?? data.country_name ?? '',
     countryCode: data.country_code ?? data.countryCode ?? '',
     city: data.city ?? '',
     region: data.region ?? data.regionName ?? data.region_name ?? '',
-    isp: data.isp ?? data.org ?? '',
-    timezone: data.timezone ?? '',
-    lat: Number.isFinite(Number(data.lat)) ? Number(data.lat) : null,
-    lon: Number.isFinite(Number(data.lon)) ? Number(data.lon) : null,
+    isp:
+      data.isp ??
+      data.organization_name ??
+      data.organization ??
+      data.org ??
+      data.connection?.isp ??
+      data.connection?.org ??
+      '',
+    timezone,
+    lat: Number.isFinite(Number(data.lat ?? data.latitude))
+      ? Number(data.lat ?? data.latitude)
+      : null,
+    lon: Number.isFinite(Number(data.lon ?? data.longitude))
+      ? Number(data.lon ?? data.longitude)
+      : null,
   }
 }
 
 function readStoredGeo() {
   return normalizeGeo(safeJsonParse(localStorage.getItem(LS_KEYS.GEO), null))
+}
+
+function hasGeoLocation(value) {
+  return [value?.country, value?.city, value?.region, value?.isp].some(
+    (part) => typeof part === 'string' && part.trim() && part.trim() !== 'Unknown'
+  )
+}
+
+function getGeoFallback(ip) {
+  const cleanIp = typeof ip === 'string' ? ip.trim() : ''
+  const fallbackKey = Object.keys(GEO_FALLBACKS).find((key) => cleanIp.startsWith(key))
+  return fallbackKey ? { ...GEO_FALLBACKS[fallbackKey], ip: cleanIp } : { ...EMPTY_GEO, ip: cleanIp }
 }
 
 async function fetchJson(url, signal) {
@@ -208,7 +278,7 @@ export default function useServerStatus() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const lastOnlineRef = useRef(null)
-  const pollStartedAtRef = useRef(Date.now())
+  const pollStartedAtRef = useRef(0)
   const intervalRef = useRef(null)
   const timeoutRef = useRef(null)
   const abortRef = useRef(null)
@@ -244,21 +314,45 @@ export default function useServerStatus() {
           mcscansPromise,
         ])
 
-        const mcstatusData =
-          mcstatusRes.status === 'fulfilled' ? mcstatusRes.value : null
-        const mcstatusStatus = normalizeStatusFromMcstatus(mcstatusData, status)
+        if (
+          mcstatusRes.status === 'rejected' &&
+          mcsrvstatRes.status === 'rejected' &&
+          mcscansRes.status === 'rejected'
+        ) {
+          throw mcstatusRes.reason ?? mcsrvstatRes.reason ?? mcscansRes.reason
+        }
 
-        const mcsrvstatStatus =
-          mcsrvstatRes.status === 'fulfilled'
-            ? normalizeStatusFromMcsrvstat(mcsrvstatRes.value, mcstatusStatus)
+        const mcstatusData =
+          mcstatusRes.status === 'fulfilled' && isObjectData(mcstatusRes.value)
+            ? mcstatusRes.value
             : null
-        const mcscansStatus =
-          mcscansRes.status === 'fulfilled'
-            ? normalizeStatusFromMcscans(mcscansRes.value, mcstatusStatus)
+        const mcsrvstatData =
+          mcsrvstatRes.status === 'fulfilled' && isObjectData(mcsrvstatRes.value)
+            ? mcsrvstatRes.value
             : null
+        const mcscansData =
+          mcscansRes.status === 'fulfilled' && isObjectData(mcscansRes.value)
+            ? mcscansRes.value
+            : null
+
+        const mcstatusStatus = mcstatusData
+          ? normalizeStatusFromMcstatus(mcstatusData)
+          : null
+
+        const fallbackStatus = mcstatusStatus ?? EMPTY_STATUS
+        const mcsrvstatStatus = mcsrvstatData
+          ? normalizeStatusFromMcsrvstat(mcsrvstatData, fallbackStatus)
+          : null
+        const mcscansStatus = mcscansData
+          ? normalizeStatusFromMcscans(mcscansData, fallbackStatus)
+          : null
 
         const merged = mergeStatus(mcstatusStatus, mcsrvstatStatus, mcscansStatus)
-        const nextOnline = Boolean(merged.online)
+        if (typeof merged.online !== 'boolean') {
+          throw new Error('No confirmed server status available')
+        }
+
+        const nextOnline = merged.online
         const previousOnline = lastOnlineRef.current
 
         setStatus(merged)
@@ -277,24 +371,34 @@ export default function useServerStatus() {
         if (!geoResolvedRef.current) {
           geoResolvedRef.current = true
           const storedGeo = readStoredGeo()
-          if (localStorage.getItem(LS_KEYS.GEO)) {
+          if (
+            localStorage.getItem(LS_KEYS.GEO) &&
+            hasGeoLocation(storedGeo) &&
+            storedGeo.ip === merged.ip
+          ) {
             if (mountedRef.current) setGeo(storedGeo)
-          } else if (mcstatusData?.ip_address) {
+          } else if (merged.ip) {
+            const fallbackGeo = getGeoFallback(merged.ip)
+            if (hasGeoLocation(fallbackGeo)) {
+              localStorage.setItem(LS_KEYS.GEO, JSON.stringify(fallbackGeo))
+              if (mountedRef.current) setGeo(fallbackGeo)
+            }
+
             try {
-              const geoData = await fetchJson(IPWHOIS_URL(mcstatusData.ip), controller.signal)
-              const normalizedGeo = normalizeGeo(geoData)
+              const geoData = await fetchJson(IPWHOIS_URL(merged.ip), controller.signal)
+              const fetchedGeo = { ...normalizeGeo(geoData), ip: merged.ip }
+              const normalizedGeo = hasGeoLocation(fetchedGeo)
+                ? fetchedGeo
+                : getGeoFallback(merged.ip)
               localStorage.setItem(LS_KEYS.GEO, JSON.stringify(normalizedGeo))
               if (mountedRef.current) setGeo(normalizedGeo)
             } catch {
-              if (mountedRef.current) setGeo(storedGeo)
+              localStorage.setItem(LS_KEYS.GEO, JSON.stringify(fallbackGeo))
+              if (mountedRef.current) setGeo(fallbackGeo)
             }
           } else if (mountedRef.current) {
             setGeo(storedGeo)
           }
-        }
-
-        if (mcstatusRes.status === 'rejected' && mcsrvstatRes.status === 'rejected' && mcscansRes.status === 'rejected') {
-          throw mcstatusRes.reason ?? mcsrvstatRes.reason ?? mcscansRes.reason
         }
       } catch (err) {
         if (!controller.signal.aborted && mountedRef.current) {
